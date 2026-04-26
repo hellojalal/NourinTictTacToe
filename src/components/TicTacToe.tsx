@@ -283,7 +283,7 @@ export default function TicTacToe() {
       <footer className="mt-8 z-10 flex gap-4 text-purple-300/60 font-medium text-xs tracking-tighter uppercase">
         <div className="flex items-center gap-1"><User className="w-3 h-3" /> 2 Players</div>
         <div>•</div>
-        <div>Made with Love</div>
+        <div>Ready to Play</div>
         <div>•</div>
         <div>v1.0</div>
       </footer>
