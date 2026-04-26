@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Moon, RefreshCw, Trophy, User } from 'lucide-react';
+import { Star, Moon, RefreshCw, Trophy, User, Volume2, VolumeX } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import useSound from 'use-sound';
 import { clsx, type ClassValue } from 'clsx';
@@ -26,12 +26,40 @@ export default function TicTacToe() {
   const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
   const [winner, setWinner] = useState<SquareValue | 'Draw'>(null);
   const [winningLine, setWinningLine] = useState<number[] | null>(null);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
 
-  // Sound effects
-  // Using high-quality small sound assets from a reliable CDN
-  const [playPop] = useSound('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3', { volume: 0.5 });
-  const [playWin] = useSound('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3', { volume: 0.5 });
-  const [playDraw] = useSound('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3', { volume: 0.5 });
+  // Sound effects - using useRef for stable persistence and better performance
+  const sounds = React.useRef<{ [key: string]: HTMLAudioElement }>({});
+
+  useEffect(() => {
+    // Initializing sounds with high-quality, stable Mixkit paths
+    sounds.current = {
+      star: new Audio('https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3'),
+      moon: new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3'),
+      win: new Audio('https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3'),
+      draw: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
+      reset: new Audio('https://assets.mixkit.co/active_storage/sfx/1471/1471-preview.mp3'),
+    };
+    
+    Object.values(sounds.current).forEach(audio => {
+      audio.load();
+      audio.volume = 0.6;
+    });
+  }, []);
+
+  const playSfx = useCallback((key: string) => {
+    if (!isSoundEnabled) return;
+    const sfx = sounds.current[key];
+    if (sfx) {
+      sfx.currentTime = 0;
+      const playPromise = sfx.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Silently handle if user hasn't interacted with DOM yet
+        });
+      }
+    }
+  }, [isSoundEnabled]);
 
   const checkWinner = useCallback((squares: SquareValue[]) => {
     for (const [a, b, c] of WINNING_COMBINATIONS) {
@@ -48,7 +76,13 @@ export default function TicTacToe() {
   const handleClick = (index: number) => {
     if (board[index] || winner) return;
 
-    playPop();
+    // Trigger move sound immediately
+    if (currentPlayer === 'X') {
+      playSfx('star');
+    } else {
+      playSfx('moon');
+    }
+
     const newBoard = [...board];
     newBoard[index] = currentPlayer;
     setBoard(newBoard);
@@ -57,16 +91,19 @@ export default function TicTacToe() {
     if (result) {
       setWinner(result.winner);
       setWinningLine(result.line);
-      if (result.winner !== 'Draw') {
-        playWin();
-        confetti({
-          particleCount: 150,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#FACC15', '#60A5FA', '#C084FC']
-        });
+      
+      if (result.winner === 'Draw') {
+        setTimeout(() => playSfx('draw'), 200);
       } else {
-        playDraw();
+        setTimeout(() => {
+          playSfx('win');
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#FACC15', '#60A5FA', '#C084FC']
+          });
+        }, 300);
       }
     } else {
       setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
@@ -74,6 +111,7 @@ export default function TicTacToe() {
   };
 
   const resetGame = () => {
+    playSfx('reset');
     const nextStarter = roundStarter === 'X' ? 'O' : 'X';
     setRoundStarter(nextStarter);
     setBoard(Array(9).fill(null));
@@ -83,7 +121,7 @@ export default function TicTacToe() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-4 font-sans overflow-hidden">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-2 md:p-4 font-sans overflow-hidden">
       {/* Decorative stars */}
       <div className="absolute inset-0 pointer-events-none">
         {[...Array(20)].map((_, i) => (
@@ -114,54 +152,60 @@ export default function TicTacToe() {
       <motion.div
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="z-10 text-center mb-8"
+        className="z-10 text-center mb-4 md:mb-8 relative w-full max-w-xs"
       >
-        <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-pink-400 to-blue-400 drop-shadow-lg mb-2">
-          SPACE FRIENDS
+        <button 
+          onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+          className="absolute -right-2 md:-right-12 top-0 p-2 md:p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-sm transition-all"
+        >
+          {isSoundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+        </button>
+        <h1 className="text-4xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-pink-400 to-blue-400 drop-shadow-lg leading-tight uppercase">
+          Nourin
         </h1>
-        <p className="text-purple-200 text-lg font-medium tracking-widest uppercase">Tic-Tac-Toe</p>
+        <p className="text-purple-200 text-sm md:text-lg font-medium tracking-widest uppercase">Tic-Tac-Toe</p>
       </motion.div>
 
-      <div className="relative z-10 bg-white/10 backdrop-blur-xl p-6 rounded-3xl border-4 border-white/20 shadow-2xl">
+      <div className="relative z-10 bg-white/10 backdrop-blur-xl p-4 md:p-6 rounded-3xl border-2 md:border-4 border-white/20 shadow-2xl w-full max-w-[340px] md:max-w-md">
         {/* Game Status */}
-        <div className="flex items-center justify-between mb-8 px-2">
+        <div className="flex items-center justify-between mb-4 md:mb-8 px-1">
           <motion.div 
             animate={{ 
               scale: currentPlayer === 'X' ? 1.1 : 1,
               opacity: currentPlayer === 'X' || winner === 'X' ? 1 : 0.5
             }}
             className={cn(
-              "flex flex-col items-center gap-2 transition-all p-3 rounded-2xl",
+              "flex flex-col items-center gap-1 md:gap-2 transition-all p-2 md:p-3 rounded-2xl",
               currentPlayer === 'X' && !winner ? "bg-yellow-400/20 shadow-[0_0_20px_rgba(250,204,21,0.3)]" : ""
             )}
           >
-            <div className="bg-yellow-400 p-3 rounded-xl shadow-lg transform rotate-[-5deg]">
-              <Star className="w-8 h-8 text-yellow-900 fill-yellow-900" />
+            <div className="bg-yellow-400 p-2 md:p-3 rounded-xl shadow-lg transform rotate-[-5deg]">
+              <Star className="w-6 h-6 md:w-8 md:h-8 text-yellow-900 fill-yellow-900" />
             </div>
-            <span className="text-yellow-400 font-bold text-sm uppercase tracking-tighter">Starling</span>
+            <span className="text-yellow-400 font-bold text-[10px] md:text-sm uppercase tracking-tighter">Starling</span>
           </motion.div>
 
           {winner ? (
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              className="px-6 py-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full font-black text-white shadow-xl flex items-center gap-2"
+              className="px-3 md:px-6 py-1 md:py-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full font-black text-white shadow-xl flex items-center gap-1 md:gap-2 absolute left-1/2 -translate-x-1/2 z-20 whitespace-nowrap top-4 md:static md:translate-x-0"
             >
               {winner === 'Draw' ? (
-                <span className="text-xl">IT'S A TIE! 🤝</span>
+                <span className="text-sm md:text-xl">IT'S A TIE! 🤝</span>
               ) : (
                 <>
-                  <Trophy className="w-6 h-6 animate-bounce" />
-                  <span className="text-xl">{winner === 'X' ? 'STARLING' : 'MOONY'} WINS!</span>
+                  <Trophy className="w-4 h-4 md:w-6 md:h-6 animate-bounce" />
+                  <span className="text-sm md:text-xl">{winner === 'X' ? 'STARLING' : 'MOONY'} WINS!</span>
                 </>
               )}
             </motion.div>
           ) : (
-            <div className="h-10 w-32 flex items-center justify-center">
-              <div className="flex gap-2">
-                <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2 }} className="w-2 h-2 rounded-full bg-pink-400" />
-                <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2, delay: 0.3 }} className="w-2 h-2 rounded-full bg-purple-400" />
-                <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2, delay: 0.6 }} className="w-2 h-2 rounded-full bg-blue-400" />
+            <div className="h-10 w-20 md:w-32 flex items-center justify-center">
+              <div className="flex gap-1 md:gap-2">
+                <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2 }} className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-pink-400" />
+                <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2, delay: 0.3 }} className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-purple-400" />
+                <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2, delay: 0.6 }} className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-400" />
               </div>
             </div>
           )}
@@ -172,19 +216,19 @@ export default function TicTacToe() {
               opacity: currentPlayer === 'O' || winner === 'O' ? 1 : 0.5
             }}
             className={cn(
-              "flex flex-col items-center gap-2 transition-all p-3 rounded-2xl",
+              "flex flex-col items-center gap-1 md:gap-2 transition-all p-2 md:p-3 rounded-2xl",
               currentPlayer === 'O' && !winner ? "bg-blue-400/20 shadow-[0_0_20px_rgba(96,165,250,0.3)]" : ""
             )}
           >
-            <div className="bg-blue-400 p-3 rounded-xl shadow-lg transform rotate-[5deg]">
-              <Moon className="w-8 h-8 text-blue-900 fill-blue-900" />
+            <div className="bg-blue-400 p-2 md:p-3 rounded-xl shadow-lg transform rotate-[5deg]">
+              <Moon className="w-6 h-6 md:w-8 md:h-8 text-blue-900 fill-blue-900" />
             </div>
-            <span className="text-blue-400 font-bold text-sm uppercase tracking-tighter">Moony</span>
+            <span className="text-blue-400 font-bold text-[10px] md:text-sm uppercase tracking-tighter">Moony</span>
           </motion.div>
         </div>
 
         {/* Board */}
-        <div className="grid grid-cols-3 gap-4 bg-purple-800/40 p-4 rounded-2xl shadow-inner border-2 border-white/10">
+        <div className="grid grid-cols-3 gap-2 md:gap-4 bg-purple-800/40 p-2 md:p-4 rounded-2xl shadow-inner border-2 border-white/10">
           {board.map((value, i) => (
             <motion.button
               key={i}
@@ -192,9 +236,9 @@ export default function TicTacToe() {
               whileTap={!value && !winner ? { scale: 0.9 } : {}}
               onClick={() => handleClick(i)}
               className={cn(
-                "w-20 h-20 md:w-28 md:h-28 rounded-2xl flex items-center justify-center transition-all duration-300 relative overflow-hidden shadow-md",
+                "w-20 h-20 md:w-28 md:h-28 rounded-xl md:rounded-2xl flex items-center justify-center transition-all duration-300 relative overflow-hidden shadow-md",
                 !value && !winner ? "bg-purple-700/50 hover:bg-purple-600/50 active:shadow-inner" : "cursor-default",
-                winningLine?.includes(i) ? "bg-gradient-to-br from-pink-500 to-yellow-500 ring-4 ring-white ring-inset shadow-[0_0_30px_rgba(255,255,255,0.4)]" : "bg-purple-800/60"
+                winningLine?.includes(i) ? "bg-gradient-to-br from-pink-500 to-yellow-500 ring-2 md:ring-4 ring-white ring-inset shadow-[0_0_20px_rgba(255,255,255,0.4)]" : "bg-purple-800/60"
               )}
             >
               <AnimatePresence mode="wait">
@@ -205,7 +249,7 @@ export default function TicTacToe() {
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 20 }}
                   >
-                    <Star className="w-12 h-12 md:w-16 md:h-16 text-yellow-400 fill-yellow-400 drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]" />
+                    <Star className="w-10 h-10 md:w-16 md:h-16 text-yellow-400 fill-yellow-400 drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]" />
                   </motion.div>
                 )}
                 {value === 'O' && (
@@ -215,7 +259,7 @@ export default function TicTacToe() {
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 20 }}
                   >
-                    <Moon className="w-12 h-12 md:w-16 md:h-16 text-blue-400 fill-blue-400 drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]" />
+                    <Moon className="w-10 h-10 md:w-16 md:h-16 text-blue-400 fill-blue-400 drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]" />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -228,11 +272,11 @@ export default function TicTacToe() {
           whileHover={{ scale: 1.05, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
           whileTap={{ scale: 0.95 }}
           onClick={resetGame}
-          className="mt-8 w-full group relative flex items-center justify-center gap-3 bg-white text-indigo-900 font-black px-6 py-4 rounded-2xl shadow-xl overflow-hidden"
+          className="mt-4 md:mt-8 w-full group relative flex items-center justify-center gap-2 md:gap-3 bg-white text-indigo-900 font-black px-4 md:px-6 py-3 md:py-4 rounded-2xl shadow-xl overflow-hidden"
         >
           <div className="absolute inset-0 bg-yellow-400 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left opacity-10" />
-          <RefreshCw className="w-6 h-6 group-hover:rotate-180 transition-transform duration-500" />
-          <span className="text-xl tracking-wide uppercase">PLAY AGAIN</span>
+          <RefreshCw className="w-5 h-5 md:w-6 md:h-6 group-hover:rotate-180 transition-transform duration-500" />
+          <span className="text-lg md:text-xl tracking-wide uppercase">PLAY AGAIN</span>
         </motion.button>
       </div>
 
