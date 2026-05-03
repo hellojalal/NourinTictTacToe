@@ -27,6 +27,8 @@ export default function TicTacToe() {
   const [winner, setWinner] = useState<SquareValue | 'Draw'>(null);
   const [winningLine, setWinningLine] = useState<number[] | null>(null);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const [gameMode, setGameMode] = useState<'2P' | 'CPU'>('2P');
+  const [isCpuThinking, setIsCpuThinking] = useState(false);
 
   // Sound effects - using useRef for stable persistence and better performance
   const sounds = React.useRef<{ [key: string]: HTMLAudioElement }>({});
@@ -41,9 +43,9 @@ export default function TicTacToe() {
       reset: new Audio('https://assets.mixkit.co/active_storage/sfx/1471/1471-preview.mp3'),
     };
     
-    Object.values(sounds.current).forEach(audio => {
-      audio.load();
-      audio.volume = 0.6;
+    Object.values(sounds.current).forEach((audio) => {
+      (audio as HTMLAudioElement).load();
+      (audio as HTMLAudioElement).volume = 0.6;
     });
   }, []);
 
@@ -73,8 +75,59 @@ export default function TicTacToe() {
     return null;
   }, []);
 
-  const handleClick = (index: number) => {
+  const minimax = useCallback((board: SquareValue[], depth: number, isMaximizing: boolean): number => {
+    const result = checkWinner(board);
+    if (result) {
+      if (result.winner === 'O') return 10 - depth;
+      if (result.winner === 'X') return depth - 10;
+      return 0;
+    }
+
+    if (isMaximizing) {
+      let bestScore = -Infinity;
+      for (let i = 0; i < 9; i++) {
+        if (!board[i]) {
+          board[i] = 'O';
+          const score = minimax(board, depth + 1, false);
+          board[i] = null;
+          bestScore = Math.max(score, bestScore);
+        }
+      }
+      return bestScore;
+    } else {
+      let bestScore = Infinity;
+      for (let i = 0; i < 9; i++) {
+        if (!board[i]) {
+          board[i] = 'X';
+          const score = minimax(board, depth + 1, true);
+          board[i] = null;
+          bestScore = Math.min(score, bestScore);
+        }
+      }
+      return bestScore;
+    }
+  }, [checkWinner]);
+
+  const getBestMove = useCallback((currentBoard: SquareValue[]) => {
+    let bestScore = -Infinity;
+    let move = -1;
+    for (let i = 0; i < 9; i++) {
+      if (!currentBoard[i]) {
+        const boardCopy = [...currentBoard];
+        boardCopy[i] = 'O';
+        const score = minimax(boardCopy, 0, false);
+        if (score > bestScore) {
+          bestScore = score;
+          move = i;
+        }
+      }
+    }
+    return move;
+  }, [minimax]);
+
+  const handleClick = (index: number, isAutoMove: boolean = false) => {
     if (board[index] || winner) return;
+    if (!isAutoMove && (isCpuThinking || (gameMode === 'CPU' && currentPlayer === 'O'))) return;
 
     // Trigger move sound immediately
     if (currentPlayer === 'X') {
@@ -118,7 +171,22 @@ export default function TicTacToe() {
     setCurrentPlayer(nextStarter);
     setWinner(null);
     setWinningLine(null);
+    setIsCpuThinking(false);
   };
+
+  useEffect(() => {
+    if (gameMode === 'CPU' && currentPlayer === 'O' && !winner) {
+      setIsCpuThinking(true);
+      const timer = setTimeout(() => {
+        const bestMove = getBestMove(board);
+        if (bestMove !== -1) {
+          handleClick(bestMove, true);
+        }
+        setIsCpuThinking(false);
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [currentPlayer, gameMode, winner, board, getBestMove]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-2 md:p-4 font-sans overflow-hidden">
@@ -223,7 +291,9 @@ export default function TicTacToe() {
             <div className="bg-blue-400 p-2 md:p-3 rounded-xl shadow-lg transform rotate-[5deg]">
               <Moon className="w-6 h-6 md:w-8 md:h-8 text-blue-900 fill-blue-900" />
             </div>
-            <span className="text-blue-400 font-bold text-[10px] md:text-sm uppercase tracking-tighter">Moony</span>
+            <span className="text-blue-400 font-bold text-[10px] md:text-sm uppercase tracking-tighter">
+              {gameMode === 'CPU' ? 'Computer' : 'Moony'}
+            </span>
           </motion.div>
         </div>
 
@@ -278,14 +348,30 @@ export default function TicTacToe() {
           <RefreshCw className="w-5 h-5 md:w-6 md:h-6 group-hover:rotate-180 transition-transform duration-500" />
           <span className="text-lg md:text-xl tracking-wide uppercase">PLAY AGAIN</span>
         </motion.button>
+
+        {/* Game Mode Selector */}
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={() => {
+              setGameMode(gameMode === '2P' ? 'CPU' : '2P');
+              resetGame();
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-white/80 hover:text-white transition-all text-sm font-bold uppercase tracking-widest border border-white/10"
+          >
+            <User className="w-4 h-4" />
+            {gameMode === '2P' ? 'Switch to CPU' : 'Switch to 2 Players'}
+          </button>
+        </div>
       </div>
 
       <footer className="mt-8 z-10 flex gap-4 text-purple-300/60 font-medium text-xs tracking-tighter uppercase">
-        <div className="flex items-center gap-1"><User className="w-3 h-3" /> 2 Players</div>
+        <div className="flex items-center gap-1">
+          <User className="w-3 h-3" /> {gameMode === '2P' ? '2 Players' : 'vs Computer'}
+        </div>
         <div>•</div>
         <div>Ready to Play</div>
         <div>•</div>
-        <div>v1.0</div>
+        <div>V2.0</div>
       </footer>
 
       {/* Cloud shapes at bottom for extra cuteness */}
